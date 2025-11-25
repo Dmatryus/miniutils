@@ -399,10 +399,10 @@ class UniversalMarkdownConverter:
         )
 
         # Расширения Markdown
+        # Примечание: nl2br убран, так как он ломает парсинг таблиц с inline-кодом
         self.markdown_extensions = [
             "tables",
             "fenced_code",
-            "nl2br",
             "sane_lists",
             "footnotes",
             "attr_list",
@@ -580,8 +580,48 @@ class UniversalMarkdownConverter:
             file_path = Path(diagram_path).absolute()
             return f'<div class="mermaid-diagram"><img src="file:///{file_path}" alt="Mermaid Diagram"/></div>'
 
+    def preprocess_tables(self, content: str) -> str:
+        """
+        Добавляет пустую строку перед таблицами, если её нет.
+        Markdown требует пустую строку перед таблицей для корректного парсинга.
+
+        Args:
+            content: Исходный Markdown текст
+
+        Returns:
+            Markdown с добавленными пустыми строками перед таблицами
+        """
+        lines = content.split('\n')
+        result = []
+        in_code_block = False
+
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+
+            # Отслеживаем вход/выход из блоков кода (``` или ~~~)
+            if stripped.startswith('```') or stripped.startswith('~~~'):
+                in_code_block = not in_code_block
+
+            # Проверяем, является ли строка началом таблицы (начинается с |)
+            # Пропускаем обработку внутри блоков кода
+            is_table_line = stripped.startswith('|') and not in_code_block
+
+            # Проверяем, нужно ли добавить пустую строку
+            if is_table_line and i > 0:
+                prev_line = lines[i - 1].strip()
+                # Если предыдущая строка не пустая и не часть таблицы
+                if prev_line and not prev_line.startswith('|'):
+                    result.append('')  # Добавляем пустую строку
+
+            result.append(line)
+
+        return '\n'.join(result)
+
     def process_markdown(self, content: str, use_online: bool = False) -> str:
         """Обрабатывает Markdown, заменяя Mermaid диаграммы и подсвечивая код"""
+        # Добавляем пустые строки перед таблицами для корректного парсинга
+        content = self.preprocess_tables(content)
+
         # Подсвечиваем код
         content = self.process_code_blocks(content)
 
